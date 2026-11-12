@@ -53,62 +53,66 @@ public class PetClinicConcurrencyTests {
 		RestTemplate template = restTemplateBuilder.baseUri("http://localhost:" + port).build();
 
 		int threadCount = 2;
-		ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
-		CountDownLatch readyLatch = new CountDownLatch(threadCount);
-		CountDownLatch startLatch = new CountDownLatch(1);
-		CountDownLatch doneLatch = new CountDownLatch(threadCount);
+		AtomicInteger successCount;
+		AtomicInteger failureCount;
+		try (ExecutorService executorService = Executors.newFixedThreadPool(threadCount)) {
+			CountDownLatch readyLatch = new CountDownLatch(threadCount);
+			CountDownLatch startLatch = new CountDownLatch(1);
+			CountDownLatch doneLatch = new CountDownLatch(threadCount);
 
-		AtomicInteger successCount = new AtomicInteger(0);
-		AtomicInteger failureCount = new AtomicInteger(0);
+			successCount = new AtomicInteger(0);
+			failureCount = new AtomicInteger(0);
 
-		for (int i = 0; i < threadCount; i++) {
-			executorService.submit(() -> {
-				readyLatch.countDown();
-				try {
-					startLatch.await(); // Wait to start simultaneously
+			for (int i = 0; i < threadCount; i++) {
+				executorService.submit(() -> {
+					readyLatch.countDown();
+					try {
+						startLatch.await(); // Wait to start simultaneously
 
-					HttpHeaders headers = new HttpHeaders();
-					headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+						HttpHeaders headers = new HttpHeaders();
+						headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
-					MultiValueMap<String, String> map = new LinkedMultiValueMap<>();
-					map.add("name", duplicatePetName);
-					map.add("birthDate", "2020-01-01");
-					map.add("type", "cat");
+						MultiValueMap<String, String> map = new LinkedMultiValueMap<>();
+						map.add("name", duplicatePetName);
+						map.add("birthDate", "2020-01-01");
+						map.add("type", "cat");
 
-					HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(map, headers);
+						HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(map, headers);
 
-					ResponseEntity<String> response = template.postForEntity("/owners/" + ownerId + "/pets/new",
-							request, String.class);
+						ResponseEntity<String> response = template.postForEntity("/owners/" + ownerId + "/pets/new",
+								request, String.class);
 
-					String body = response.getBody();
-					// If the response page contains the duplicate validation error, it
-					// was blocked
-					if (response.getStatusCode().is2xxSuccessful()
-							&& (body == null || !body.contains("is already in use"))) {
-						successCount.incrementAndGet();
+						String body = response.getBody();
+						// If the response page contains the duplicate validation error,
+						// it
+						// was blocked
+						if (response.getStatusCode().is2xxSuccessful()
+								&& (body == null || !body.contains("is already in use"))) {
+							successCount.incrementAndGet();
+						}
+						else {
+							failureCount.incrementAndGet();
+						}
 					}
-					else {
+					catch (Exception e) {
 						failureCount.incrementAndGet();
 					}
-				}
-				catch (Exception e) {
-					failureCount.incrementAndGet();
-				}
-				finally {
-					doneLatch.countDown();
-				}
-			});
-		}
+					finally {
+						doneLatch.countDown();
+					}
+				});
+			}
 
-		try {
-			boolean ready = readyLatch.await(10, TimeUnit.SECONDS);
-			assertThat(ready).isTrue();
-			startLatch.countDown();
-			boolean completed = doneLatch.await(10, TimeUnit.SECONDS);
-			assertThat(completed).isTrue();
-		}
-		finally {
-			executorService.shutdown();
+			try {
+				boolean ready = readyLatch.await(10, TimeUnit.SECONDS);
+				assertThat(ready).isTrue();
+				startLatch.countDown();
+				boolean completed = doneLatch.await(10, TimeUnit.SECONDS);
+				assertThat(completed).isTrue();
+			}
+			finally {
+				executorService.shutdown();
+			}
 		}
 
 		Owner updatedOwner = ownerRepository.findById(ownerId).get();
