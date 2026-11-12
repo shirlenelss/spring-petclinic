@@ -125,7 +125,7 @@ class PetController {
 			this.owners.saveAndFlush(owner);
 		}
 		catch (DataIntegrityViolationException ex) {
-			if (isDuplicatePetNameViolation(ex)) {
+			if (!isDuplicatePetNameViolation(ex)) {
 				throw ex;
 			}
 			result.rejectValue("name", "duplicate", "already exists");
@@ -167,7 +167,7 @@ class PetController {
 			updatePetDetails(owner, pet);
 		}
 		catch (DataIntegrityViolationException ex) {
-			if (isDuplicatePetNameViolation(ex)) {
+			if (!isDuplicatePetNameViolation(ex)) {
 				throw ex;
 			}
 			result.rejectValue("name", "duplicate", "already exists");
@@ -200,7 +200,7 @@ class PetController {
 
 	private boolean isDuplicatePetNameViolation(DataIntegrityViolationException ex) {
 		String message = ex.getMessage();
-		return message == null || !message.toLowerCase().contains("unique_owner_pet_name");
+		return message != null && message.toLowerCase().contains("unique_owner_pet_name");
 	}
 
 }
